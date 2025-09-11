@@ -9,8 +9,30 @@ const defaultUrl = process.env.VERCEL_URL
 
 export const metadata: Metadata = {
   metadataBase: new URL(defaultUrl),
-  title: "Next.js and Supabase Starter Kit",
-  description: "The fastest way to build apps with Next.js and Supabase",
+  title: 'Fidelity Dashboard',
+  description: 'Route and branch management dashboard',
+  icons: {
+    icon: [
+      {
+        url: 'https://fidelity-services.com/wp-content/uploads/2021/08/Fidelity-logo.svg',
+        sizes: '32x32',
+        type: 'image/svg+xml',
+      },
+      {
+        url: 'https://fidelity-services.com/wp-content/uploads/2021/08/Fidelity-logo.svg',
+        sizes: '64x64',
+        type: 'image/svg+xml',
+      },
+    ],
+    shortcut: 'https://fidelity-services.com/wp-content/uploads/2021/08/Fidelity-logo.svg',
+    apple: [
+      {
+        url: 'https://fidelity-services.com/wp-content/uploads/2021/08/Fidelity-logo.svg',
+        sizes: '180x180',
+        type: 'image/svg+xml',
+      },
+    ],
+  },
 };
 
 const geistSans = Geist({
