@@ -205,9 +205,10 @@ export function RealtimeEnhancedVehicleCard({ vehicle, onAction }: RealtimeEnhan
         statusIcon = Clock;
       }
     } else if (hasLocation && !isRecent) {
-      status = 'stale';
-      statusColor = 'bg-orange-100 text-orange-800 border-orange-200';
-      statusIcon = AlertTriangle;
+      // Show as stopped instead of stale
+      status = 'stopped';
+      statusColor = 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      statusIcon = Clock;
     }
 
     return { status, statusColor, statusIcon };

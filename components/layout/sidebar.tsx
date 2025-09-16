@@ -31,7 +31,6 @@ const navigation = [
     title: 'ROUTING INFORMATION',
     items: [
       { id: 'routes', name: 'Routes', icon: Route },
-      { id: 'route-assignment', name: 'Route Assignment', icon: GitBranch },
       { id: 'route-reports', name: 'Route Reports', icon: BarChart3 },
     ],
   },
