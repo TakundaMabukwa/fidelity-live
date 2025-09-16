@@ -86,3 +86,37 @@ export async function deleteAssignedLoadsByDay(day: string) {
 
   return true;
 }
+
+export async function createRouteFromAssignedLoad(assignedLoadId: number, routeName: string, tomorrowDayName: string) {
+  const supabase = await createClient();
+  
+  try {
+    // Create route for tomorrow
+    const { data: route, error: routeError } = await supabase
+      .from('routes')
+      .insert({
+        Route: routeName,
+        LocationCode: null,
+        ServiceDays: tomorrowDayName,
+        userGroup: null,
+        WeekNumber: null,
+        StartDate: null,
+        EndDate: null,
+        Inactive: false,
+        reject_id: assignedLoadId,
+        rejected: true
+      })
+      .select()
+      .single();
+
+    if (routeError) {
+      console.error('Error creating route from assigned load:', routeError);
+      throw new Error('Failed to create route from assigned load');
+    }
+
+    return route;
+  } catch (error) {
+    console.error('Unexpected error in createRouteFromAssignedLoad:', error);
+    throw error;
+  }
+}

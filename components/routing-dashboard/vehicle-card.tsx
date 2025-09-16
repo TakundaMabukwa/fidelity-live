@@ -1,9 +1,7 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
-  Clock, 
-  Shield, 
   Hourglass, 
   Key, 
   Gauge, 
@@ -11,11 +9,10 @@ import {
   Timer, 
   Route, 
   CheckCircle,
-  Lock,
   Map
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { getVehicleRouteAssignmentForDay } from '@/lib/actions/route-assignments';
 
 export interface VehicleData {
   id: string;
@@ -35,6 +32,8 @@ export interface VehicleData {
   fleetNo?: string | null;
   manufacturer?: string | null;
   structureName?: string | null;
+  address?: string | null;
+  mileage?: number | null;
 }
 
 interface VehicleCardProps {
@@ -42,99 +41,176 @@ interface VehicleCardProps {
   onAction: (action: string, vehicleId: string) => void;
 }
 
+interface RouteAssignment {
+  assigned_route_customers: Array<{
+    status: string;
+    sequence_order: number;
+    estimated_duration_minutes?: number;
+    stop_duration_minutes?: number;
+    customer_stops?: {
+      customer: string;
+      avg_minutes?: number;
+    };
+  }>;
+  routes?: {
+    Route: string;
+  };
+}
+
 export function VehicleCard({ vehicle, onAction }: VehicleCardProps) {
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'active':
-        return 'bg-green-100 text-green-800 border-green-200';
-      case 'stopped':
-        return 'bg-red-100 text-red-800 border-red-200';
-      case 'maintenance':
-        return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      default:
-        return 'bg-gray-100 text-gray-800 border-gray-200';
+  const [routeAssignment, setRouteAssignment] = useState<RouteAssignment | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Check if vehicle has route assignment for today
+  useEffect(() => {
+    const checkRouteAssignment = async () => {
+      if (!vehicle.registrationNo) return;
+      
+      try {
+        setLoading(true);
+        const result = await getVehicleRouteAssignmentForDay(vehicle.registrationNo, 'today');
+        if (result.success) {
+          setRouteAssignment(result.data);
+        }
+      } catch (error) {
+        console.error('Error checking route assignment:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    checkRouteAssignment();
+  }, [vehicle.registrationNo]);
+
+
+  // Calculate values based on route assignment status
+  const getDisplayValues = () => {
+    if (loading) {
+      return {
+        numberOfStops: '...',
+        stopsCompleted: '...',
+        distanceFromClient: '...',
+        etaFromClient: '...',
+        speed: '...',
+        avgWaitTime: '...',
+        routeName: '...',
+        nextStop: '...',
+        estimatedTotalTime: '...',
+        avgStopTime: '...'
+      };
     }
+
+    if (!routeAssignment) {
+      // No route assigned - show empty values
+      return {
+        numberOfStops: 0,
+        stopsCompleted: 0,
+        distanceFromClient: '',
+        etaFromClient: '',
+        speed: vehicle.speed || '0 Km/h',
+        avgWaitTime: '',
+        routeName: '',
+        nextStop: '',
+        estimatedTotalTime: '',
+        avgStopTime: ''
+      };
+    }
+
+    // Route assigned - show actual values
+    const customers = routeAssignment.assigned_route_customers || [];
+    const totalStops = customers.length;
+    const completedStops = customers.filter((c) => c.status === 'completed').length;
+    const pendingStops = customers.filter((c) => c.status === 'pending');
+    const inProgressStops = customers.filter((c) => c.status === 'in_progress');
+    
+    // Calculate estimated total time from customer stops
+    const totalEstimatedMinutes = customers.reduce((total: number, customer) => {
+      return total + (customer.estimated_duration_minutes || customer.customer_stops?.avg_minutes || 0);
+    }, 0);
+    
+    // Calculate remaining time for pending and in-progress stops
+    const remainingMinutes = customers
+      .filter((c) => c.status !== 'completed')
+      .reduce((total: number, customer) => {
+        return total + (customer.estimated_duration_minutes || customer.customer_stops?.avg_minutes || 0);
+      }, 0);
+    
+    // Calculate average wait time from completed stops
+    const completedWithDuration = customers.filter((c) => c.status === 'completed' && c.stop_duration_minutes);
+    const avgWaitTime = completedWithDuration.length > 0 
+      ? Math.round(completedWithDuration.reduce((sum: number, c) => sum + (c.stop_duration_minutes || 0), 0) / completedWithDuration.length)
+      : 0;
+    
+    // Get next stop (first pending or in-progress)
+    const nextStop = [...inProgressStops, ...pendingStops]
+      .sort((a, b) => a.sequence_order - b.sequence_order)[0];
+    
+    // Get route name
+    const routeName = routeAssignment.routes?.Route || 'Unknown Route';
+    
+    return {
+      numberOfStops: totalStops,
+      stopsCompleted: completedStops,
+      distanceFromClient: '0 km', // This would come from tracking data
+      etaFromClient: remainingMinutes > 0 ? `${remainingMinutes} min` : '0 min',
+      speed: vehicle.speed || '0 Km/h',
+      avgWaitTime: avgWaitTime.toString(),
+      routeName: routeName,
+      nextStop: nextStop ? nextStop.customer_stops?.customer || 'Unknown' : 'N/A',
+      estimatedTotalTime: `${totalEstimatedMinutes} min`,
+      avgStopTime: avgWaitTime > 0 ? `${avgWaitTime} min` : '0 min'
+    };
   };
 
-  const getSafetyStatusColor = (status: string) => {
-    return status === 'motion' 
-      ? 'bg-green-100 text-green-800' 
-      : 'bg-red-100 text-red-800';
-  };
+  const displayValues = getDisplayValues();
+
 
   return (
     <div className="group bg-white shadow-lg hover:shadow-xl p-6 border border-gray-200 rounded-xl transition-all duration-300">
       {/* Header */}
       <div className="flex justify-between items-center mb-4">
         <div className="flex items-center gap-3">
-          <div className="font-bold text-gray-900 text-2xl">#{vehicle.id}</div>
-          <Badge className={getStatusColor(vehicle.status)}>
-            {vehicle.status.toUpperCase()}
-          </Badge>
-        </div>
-        <div className="flex items-center gap-2">
-          <Lock className="w-4 h-4 text-gray-400" />
-          <div className="text-gray-500 text-sm">Secured</div>
+          <div className="font-bold text-gray-900 text-2xl">{vehicle.registrationNo || 'N/A'}</div>
         </div>
       </div>
 
-      {/* Vehicle Info */}
-      <div className="bg-gray-50 mb-4 p-3 rounded-lg">
-        <div className="mb-2 font-medium text-gray-600 text-sm">Vehicle Details</div>
+      {/* Route Information - Always Display */}
+      <div className="bg-green-50 mb-4 p-3 border border-green-200 rounded-lg">
+        <div className="mb-2 font-medium text-green-800 text-sm">Route Assignment</div>
         <div className="space-y-2 text-sm">
           <div className="flex justify-between">
-            <span className="text-gray-500">Registration:</span>
-            <span className="font-mono">{vehicle.registrationNo || 'N/A'}</span>
+            <span className="text-green-600">Route:</span>
+            <span className="font-medium text-green-800">{displayValues.routeName || 'No Route Assigned'}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-gray-500">Fleet No:</span>
-            <span className="font-mono">{vehicle.fleetNo || 'N/A'}</span>
+            <span className="text-green-600">Next Stop:</span>
+            <span className="font-medium text-green-800">{displayValues.nextStop || 'N/A'}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-gray-500">Manufacturer:</span>
-            <span>{vehicle.manufacturer || 'N/A'}</span>
+            <span className="text-green-600">Progress:</span>
+            <span className="font-medium text-green-800">{displayValues.stopsCompleted}/{displayValues.numberOfStops} stops</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-gray-500">Structure:</span>
-            <span>{vehicle.structureName || 'N/A'}</span>
+            <span className="text-green-600">Est. Total Time:</span>
+            <span className="font-medium text-green-800">{displayValues.estimatedTotalTime || '0 min'}</span>
           </div>
+          {displayValues.avgStopTime && displayValues.avgStopTime !== '0 min' && (
+            <div className="flex justify-between">
+              <span className="text-green-600">Avg Stop Time:</span>
+              <span className="font-medium text-green-800">{displayValues.avgStopTime}</span>
+            </div>
+          )}
         </div>
       </div>
+
 
       {/* Vehicle Data Grid */}
       <div className="gap-4 grid grid-cols-2 mb-6">
         <div className="flex items-center gap-3">
-          <Clock className="w-5 h-5 text-blue-500" />
-          <div>
-            <div className="text-gray-500 text-xs">Start Time</div>
-            <div className="font-medium text-gray-900">{vehicle.startTime}</div>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          {/* <DollarSign className="w-5 h-5 text-green-500" /> */}
-          R
-          <div>
-            <div className="text-gray-500 text-xs">CPK</div>
-            <div className="font-medium text-gray-900">{vehicle.cpk}</div>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <Shield className="w-5 h-5 text-purple-500" />
-          <div>
-            <div className="text-gray-500 text-xs">Safety Status</div>
-            <Badge className={getSafetyStatusColor(vehicle.safetyStatus)}>
-              {vehicle.safetyStatus}
-            </Badge>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
           <Hourglass className="w-5 h-5 text-orange-500" />
           <div>
             <div className="text-gray-500 text-xs">Avg Wait Time</div>
-            <div className="font-medium text-gray-900">{vehicle.avgWaitTime}</div>
+            <div className="font-medium text-gray-900">{displayValues.avgWaitTime || '0'}</div>
           </div>
         </div>
 
@@ -150,7 +226,7 @@ export function VehicleCard({ vehicle, onAction }: VehicleCardProps) {
           <Gauge className="w-5 h-5 text-cyan-500" />
           <div>
             <div className="text-gray-500 text-xs">Speed</div>
-            <div className="font-medium text-gray-900">{vehicle.speed}</div>
+            <div className="font-medium text-gray-900">{displayValues.speed}</div>
           </div>
         </div>
 
@@ -158,7 +234,7 @@ export function VehicleCard({ vehicle, onAction }: VehicleCardProps) {
           <MapPin className="w-5 h-5 text-pink-500" />
           <div>
             <div className="text-gray-500 text-xs">Distance from Client</div>
-            <div className="font-medium text-gray-900">{vehicle.distanceFromClient}</div>
+            <div className="font-medium text-gray-900">{displayValues.distanceFromClient || '0 km'}</div>
           </div>
         </div>
 
@@ -166,7 +242,7 @@ export function VehicleCard({ vehicle, onAction }: VehicleCardProps) {
           <Timer className="w-5 h-5 text-teal-500" />
           <div>
             <div className="text-gray-500 text-xs">ETA from Client</div>
-            <div className="font-medium text-gray-900">{vehicle.etaFromClient}</div>
+            <div className="font-medium text-gray-900">{displayValues.etaFromClient || '0 min'}</div>
           </div>
         </div>
 
@@ -174,7 +250,7 @@ export function VehicleCard({ vehicle, onAction }: VehicleCardProps) {
           <Route className="w-5 h-5 text-amber-500" />
           <div>
             <div className="text-gray-500 text-xs">Total Stops</div>
-            <div className="font-medium text-gray-900">{vehicle.numberOfStops}</div>
+            <div className="font-medium text-gray-900">{displayValues.numberOfStops}</div>
           </div>
         </div>
 
@@ -182,7 +258,23 @@ export function VehicleCard({ vehicle, onAction }: VehicleCardProps) {
           <CheckCircle className="w-5 h-5 text-emerald-500" />
           <div>
             <div className="text-gray-500 text-xs">Completed</div>
-            <div className="font-medium text-gray-900">{vehicle.stopsCompleted}</div>
+            <div className="font-medium text-gray-900">{displayValues.stopsCompleted}</div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <MapPin className="w-5 h-5 text-indigo-500" />
+          <div>
+            <div className="text-gray-500 text-xs">Address</div>
+            <div className="max-w-32 font-medium text-gray-900 truncate">{vehicle.address || 'N/A'}</div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <Gauge className="w-5 h-5 text-emerald-500" />
+          <div>
+            <div className="text-gray-500 text-xs">Mileage</div>
+            <div className="font-medium text-gray-900">{vehicle.mileage ? `${vehicle.mileage.toLocaleString()} km` : 'N/A'}</div>
           </div>
         </div>
       </div>
@@ -191,12 +283,21 @@ export function VehicleCard({ vehicle, onAction }: VehicleCardProps) {
       <div className="mb-6">
         <div className="flex justify-between mb-2 text-gray-600 text-sm">
           <span>Route Progress</span>
-          <span>{vehicle.stopsCompleted}/{vehicle.numberOfStops}</span>
+          <span>
+            {typeof displayValues.numberOfStops === 'number' && displayValues.numberOfStops > 0 
+              ? `${displayValues.stopsCompleted}/${displayValues.numberOfStops}`
+              : 'No Route Assigned'
+            }
+          </span>
         </div>
         <div className="bg-gray-200 rounded-full w-full h-2">
           <div 
             className="bg-blue-500 rounded-full h-2 transition-all duration-300"
-            style={{ width: `${(vehicle.stopsCompleted / vehicle.numberOfStops) * 100}%` }}
+            style={{ 
+              width: `${typeof displayValues.stopsCompleted === 'number' && typeof displayValues.numberOfStops === 'number' && displayValues.numberOfStops > 0 
+                ? (displayValues.stopsCompleted / displayValues.numberOfStops) * 100 
+                : 0}%` 
+            }}
           />
         </div>
       </div>

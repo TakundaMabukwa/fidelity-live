@@ -4,6 +4,8 @@ import { StaffProvider } from '@/contexts/staff-context';
 import { VehiclesProvider } from '@/contexts/vehicles-context';
 import { CustomersProvider } from '@/contexts/customers-context';
 import { CustomersLocationProvider } from '@/contexts/customers-location-context';
+import { GroupedRoutesProvider } from '@/contexts/grouped-routes-context';
+import { ExternalVehiclesProvider } from '@/contexts/external-vehicles-context';
 
 export default function ProtectedLayout({
   children,
@@ -18,7 +20,11 @@ export default function ProtectedLayout({
             <VehiclesProvider>
               <CustomersProvider>
                 <CustomersLocationProvider>
-                  {children}
+                  <GroupedRoutesProvider>
+                    <ExternalVehiclesProvider>
+                      {children}
+                    </ExternalVehiclesProvider>
+                  </GroupedRoutesProvider>
                 </CustomersLocationProvider>
               </CustomersProvider>
             </VehiclesProvider>

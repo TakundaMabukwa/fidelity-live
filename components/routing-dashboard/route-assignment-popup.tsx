@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Search, Route, MapPin, Calendar, Users } from 'lucide-react';
 import { getRoutes, getCustomersByLocationCode, assignCustomersToVehicle, Route as RouteType, CustomerDuration } from '@/lib/actions/routes';
+import { getAvailableRoutes } from '@/lib/actions/route-assignments';
 
 interface RouteAssignmentPopupProps {
   isOpen: boolean;
@@ -63,9 +64,16 @@ export function RouteAssignmentPopup({
   const loadRoutes = async () => {
     setLoading(true);
     try {
-      console.log('Loading routes...');
-      const routesData = await getRoutes();
-      console.log('Routes loaded:', routesData);
+      console.log('Loading available routes...');
+      const result = await getAvailableRoutes();
+      
+      if (!result.success) {
+        console.error('Error loading available routes:', result.error);
+        return;
+      }
+      
+      const routesData = result.data;
+      console.log('Available routes loaded:', routesData);
       
       // Group routes by Route name
       const grouped = routesData.reduce((acc, route) => {
@@ -77,13 +85,18 @@ export function RouteAssignmentPopup({
         return acc;
       }, {} as Record<string, RouteType[]>);
       
-      console.log('Grouped routes:', grouped);
+      console.log('Grouped available routes:', grouped);
       
       setRoutes(routesData);
       setGroupedRoutes(grouped);
       setFilteredGroupedRoutes(grouped);
+      
+      // Show message if no routes are available
+      if (routesData.length === 0) {
+        console.log('No available routes found - all routes may already be assigned');
+      }
     } catch (error) {
-      console.error('Error loading routes:', error);
+      console.error('Error loading available routes:', error);
     } finally {
       setLoading(false);
     }
@@ -162,13 +175,13 @@ export function RouteAssignmentPopup({
               {loading ? (
                 <div className="p-8 text-gray-500 text-center">
                   <div className="mx-auto mb-4 border-b-2 border-blue-600 rounded-full w-8 h-8 animate-spin"></div>
-                  Loading today's routes...
+                  Loading available routes...
                 </div>
               ) : Object.keys(filteredGroupedRoutes).length === 0 ? (
                 <div className="p-8 text-gray-500 text-center">
                   <Route className="mx-auto mb-4 w-12 h-12 text-gray-300" />
-                  <h3 className="mb-2 font-medium text-lg">No routes found for today</h3>
-                  <p>No active routes are available for today's date</p>
+                  <h3 className="mb-2 font-medium text-lg">No available routes</h3>
+                  <p>All routes have already been assigned to vehicles</p>
                 </div>
               ) : (
                 <div className="space-y-4 p-4">

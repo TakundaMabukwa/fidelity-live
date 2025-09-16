@@ -181,3 +181,37 @@ export interface AssignedLoad {
   once_off?: boolean;
   day?: string;
 }
+
+export interface CustomerStop {
+  id: string;
+  customer: string;
+  avg_seconds: number | null;
+  avg_minutes: number | null;
+  code: string | null;
+}
+
+export interface ExternalVehicle {
+  id: number;
+  plate: string;
+  speed: number | null;
+  latitude: string | null;
+  longitude: string | null;
+  loctime: string | null;
+  quality: string | null;
+  mileage: number | null;
+  pocsagstr: string | null;
+  head: string | null;
+  geozone: string | null;
+  drivername: string | null;
+  nameevent: string | null;
+  temperature: string | null;
+  address: string | null;
+  branch: string | null;
+  created_at: string;
+}
+
+export interface GroupedRoute {
+  locationCode: string;
+  routes: Route[];
+  customers: CustomerStop[];
+}

@@ -6,7 +6,7 @@ import { Skeleton } from '../ui/skeleton'
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN
 
-const DisplayMap = ({ coords, street, city, state, country }) => {
+const DisplayMap = ({ coords, street, city, state, country, zoom = 16 }) => {
   const { lat, lng } = coords || {}
   const mapContainer = useRef(null)
   const map = useRef(null)
@@ -30,11 +30,18 @@ const DisplayMap = ({ coords, street, city, state, country }) => {
       container: mapContainer.current,
       style: 'mapbox://styles/mapbox/light-v11',
       center: center,
-      zoom: 14,
+      zoom: zoom,
     })
 
     map.current.on('load', () => {
       setLoaded(true)
+
+      // Smooth zoom to the specified level
+      map.current.easeTo({
+        center: center,
+        zoom: zoom,
+        duration: 1000
+      })
 
       new mapboxgl.Marker()
         .setLngLat(center)

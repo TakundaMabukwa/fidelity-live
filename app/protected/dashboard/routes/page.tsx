@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { UploadReport } from '@/components/routes/upload-report';
 import { AssignedLoadsTable } from '@/components/routes/assigned-loads-table';
+import { RoutesWithCustomers } from '@/components/routes/routes-with-customers';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AssignedLoadsProvider } from '@/contexts/assigned-loads-context';
 
@@ -223,13 +224,18 @@ export default function RoutesPage() {
     <AssignedLoadsProvider>
       <div className="space-y-6">
         <Tabs defaultValue="routes" className="w-full">
-          <TabsList className="grid grid-cols-2 w-full">
+          <TabsList className="grid grid-cols-3 w-full">
             <TabsTrigger value="routes">Routes</TabsTrigger>
+            <TabsTrigger value="routes-with-customers">Routes with Customers</TabsTrigger>
             <TabsTrigger value="assigned">Assigned</TabsTrigger>
           </TabsList>
           
           <TabsContent value="routes" className="mt-6">
             <RoutesContent />
+          </TabsContent>
+          
+          <TabsContent value="routes-with-customers" className="mt-6">
+            <RoutesWithCustomers />
           </TabsContent>
           
           <TabsContent value="assigned" className="mt-6">

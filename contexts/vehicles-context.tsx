@@ -33,10 +33,14 @@ export function VehiclesProvider({ children }: { children: React.ReactNode }) {
     setError(null);
     
     try {
-      const data = await getVehicles();
-      setVehicles(data);
-      setIsLoaded(true);
-      console.log('Vehicles data loaded and cached');
+      const result = await getVehicles();
+      if (result.success && result.data) {
+        setVehicles(result.data);
+        setIsLoaded(true);
+        console.log('Vehicles data loaded and cached:', result.data.length);
+      } else {
+        throw new Error(result.error || 'Failed to load vehicles');
+      }
     } catch (err) {
       console.error('Error loading vehicles:', err);
       setError(err instanceof Error ? err.message : 'Failed to load vehicles');
@@ -50,10 +54,14 @@ export function VehiclesProvider({ children }: { children: React.ReactNode }) {
     setError(null);
     
     try {
-      const data = await getVehicles();
-      setVehicles(data);
-      setIsLoaded(true);
-      console.log('Vehicles data refreshed and cached');
+      const result = await getVehicles();
+      if (result.success && result.data) {
+        setVehicles(result.data);
+        setIsLoaded(true);
+        console.log('Vehicles data refreshed and cached:', result.data.length);
+      } else {
+        throw new Error(result.error || 'Failed to refresh vehicles');
+      }
     } catch (err) {
       console.error('Error refreshing vehicles:', err);
       setError(err instanceof Error ? err.message : 'Failed to refresh vehicles');

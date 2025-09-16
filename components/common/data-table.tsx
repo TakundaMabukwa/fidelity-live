@@ -12,6 +12,8 @@ interface DataTableProps<T> {
   title?: string;
   searchPlaceholder?: string;
   loading?: boolean;
+  searchable?: boolean;
+  showActions?: boolean;
 }
 
 export function DataTable<T extends Record<string, any>>({
@@ -19,7 +21,9 @@ export function DataTable<T extends Record<string, any>>({
   columns,
   title,
   searchPlaceholder = "Search...",
-  loading = false
+  loading = false,
+  searchable = true,
+  showActions = true
 }: DataTableProps<T>) {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortConfig, setSortConfig] = useState<{
@@ -101,17 +105,19 @@ export function DataTable<T extends Record<string, any>>({
       </div>
 
       {/* Search */}
-      <div className="flex flex-shrink-0 justify-between items-center">
-        <Input
-          placeholder={searchPlaceholder}
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="max-w-sm"
-        />
-        <div className="text-gray-600 text-sm">
-          Showing {sortedData.length} of {data.length} entries
+      {searchable && (
+        <div className="flex flex-shrink-0 justify-between items-center">
+          <Input
+            placeholder={searchPlaceholder}
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="max-w-sm"
+          />
+          <div className="text-gray-600 text-sm">
+            Showing {sortedData.length} of {data.length} entries
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Table Container */}
       <div className="flex flex-col flex-1 border rounded-lg min-h-0 overflow-hidden">
@@ -161,7 +167,9 @@ export function DataTable<T extends Record<string, any>>({
                   </div>
                 </th>
               ))}
-              <th className="px-4 py-3 w-20 font-medium text-left">Actions</th>
+              {showActions && (
+                <th className="px-4 py-3 w-20 font-medium text-left">Actions</th>
+              )}
             </tr>
           </thead>
           <tbody>
@@ -188,11 +196,13 @@ export function DataTable<T extends Record<string, any>>({
                     }
                   </td>
                 ))}
-                <td className="px-4 py-3 w-20">
-                  <Button variant="ghost" size="sm">
-                    <MoreHorizontal className="w-4 h-4" />
-                  </Button>
-                </td>
+                {showActions && (
+                  <td className="px-4 py-3 w-20">
+                    <Button variant="ghost" size="sm">
+                      <MoreHorizontal className="w-4 h-4" />
+                    </Button>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>

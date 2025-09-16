@@ -5,7 +5,9 @@ import { Button } from '@/components/ui/button';
 import { Upload, FileText, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { parseExcelFile, parseCSVFile, transformToAssignedLoad, getTomorrowDayName } from '@/lib/utils/file-parser';
-import { createAssignedLoads, deleteAssignedLoadsByDay } from '@/lib/actions/assigned-loads';
+import { createAssignedLoads, deleteAssignedLoadsByDay, createRouteFromAssignedLoad } from '@/lib/actions/assigned-loads';
+import { logRouteTimingData } from '@/lib/actions/route-timing';
+import { useToast } from '@/hooks/use-toast';
 
 interface UploadReportProps {
   onUploadComplete?: () => void;
@@ -20,9 +22,12 @@ export function UploadReport({ onUploadComplete }: UploadReportProps) {
     processed: number;
     rejected: number;
     stored: number;
+    routesCreated: number;
+    timingLogsCreated: number;
   } | null>(null);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -72,37 +77,95 @@ export function UploadReport({ onUploadComplete }: UploadReportProps) {
       // Get tomorrow's day name
       const targetDay = getTomorrowDayName();
       
-      // Transform and filter data
+      // Transform and filter data - only CIT ERROR rejections
       const assignedLoads = [];
+      const citErrorLoads = [];
       let rejectedCount = 0;
+      let routesCreated = 0;
       const uniqueRejectFaults = new Set();
 
       for (const row of parsedData) {
-        // Store all records for now
-        const assignedLoad = transformToAssignedLoad(row, targetDay);
-        assignedLoads.push(assignedLoad);
+        const rejectFault = row['Reject Fault']?.toString()?.toUpperCase();
+        
+        // Only process CIT ERROR rejections
+        if (rejectFault === 'CIT ERROR') {
+          const assignedLoad = transformToAssignedLoad(row, targetDay);
+          assignedLoads.push(assignedLoad);
+          citErrorLoads.push({
+            load: assignedLoad,
+            routeName: row['Route Name']?.toString() || 'Unknown Route'
+          });
+        } else {
+          rejectedCount++;
+        }
+        
+        if (rejectFault) {
+          uniqueRejectFaults.add(rejectFault);
+        }
       }
 
       // Clear existing data for the target day
       await deleteAssignedLoadsByDay(targetDay);
 
-      // Store the new data
+      // Store the new data (only CIT ERROR records)
+      let timingLogsCreated = 0;
       if (assignedLoads.length > 0) {
-        await createAssignedLoads(assignedLoads);
+        const createdLoads = await createAssignedLoads(assignedLoads);
+        
+        // Create routes for tomorrow for each CIT ERROR load
+        for (let i = 0; i < createdLoads.length; i++) {
+          const createdLoad = createdLoads[i];
+          const citErrorLoad = citErrorLoads[i];
+          
+          try {
+            await createRouteFromAssignedLoad(
+              createdLoad.id, 
+              citErrorLoad.routeName, 
+              targetDay
+            );
+            routesCreated++;
+          } catch (error) {
+            console.error('Error creating route for load:', createdLoad.id, error);
+          }
+        }
+
+        // Log route timing data for all assigned routes
+        try {
+          console.log('🕒 Logging route timing data...');
+          const timingResult = await logRouteTimingData();
+          
+          if (timingResult.success) {
+            timingLogsCreated = timingResult.data?.length || 0;
+            console.log(`✅ Route timing data logged for ${timingLogsCreated} routes`);
+          } else {
+            console.error('❌ Failed to log route timing data:', timingResult.error);
+          }
+        } catch (error) {
+          console.error('❌ Error logging route timing data:', error);
+        }
       }
 
       // Update stats
       setUploadStats({
         total: parsedData.length,
-        processed: parsedData.length,
-        rejected: 0,
-        stored: assignedLoads.length
+        processed: assignedLoads.length,
+        rejected: rejectedCount,
+        stored: assignedLoads.length,
+        routesCreated: routesCreated,
+        timingLogsCreated: timingLogsCreated
       });
 
       setUploadStatus('success');
       setUploadMessage(
-        `Upload completed for ${targetDay}: ${assignedLoads.length} records stored successfully.`
+        `Upload completed for ${targetDay}: ${assignedLoads.length} CIT ERROR records stored, ${routesCreated} routes created for tomorrow, and ${timingLogsCreated} route timing logs created. ${rejectedCount} non-CIT ERROR records skipped.`
       );
+
+      // Show success toast
+      toast({
+        title: "Upload Successful",
+        description: `Processed ${assignedLoads.length} CIT ERROR records and created ${routesCreated} routes for tomorrow. Route timing data logged for ${timingLogsCreated} routes.`,
+        variant: "default",
+      });
 
       // Call the callback if provided
       onUploadComplete?.();
@@ -111,6 +174,13 @@ export function UploadReport({ onUploadComplete }: UploadReportProps) {
       console.error('Upload failed:', error);
       setUploadStatus('error');
       setUploadMessage(error instanceof Error ? error.message : 'Upload failed. Please try again.');
+      
+      // Show error toast
+      toast({
+        title: "Upload Failed",
+        description: error instanceof Error ? error.message : 'Upload failed. Please try again.',
+        variant: "destructive",
+      });
     } finally {
       setIsUploading(false);
       // Reset the input
@@ -175,16 +245,24 @@ export function UploadReport({ onUploadComplete }: UploadReportProps) {
               <span className="ml-2 font-medium">{uploadStats.total}</span>
             </div>
             <div>
-              <span className="text-gray-600">Processed:</span>
-              <span className="ml-2 font-medium text-green-600">{uploadStats.processed}</span>
+              <span className="text-gray-600">CIT ERROR Records:</span>
+              <span className="ml-2 font-medium text-orange-600">{uploadStats.processed}</span>
             </div>
             <div>
-              <span className="text-gray-600">Rejected (skipped):</span>
+              <span className="text-gray-600">Skipped (Non-CIT):</span>
               <span className="ml-2 font-medium text-red-600">{uploadStats.rejected}</span>
             </div>
             <div>
-              <span className="text-gray-600">Stored:</span>
-              <span className="ml-2 font-medium text-blue-600">{uploadStats.stored}</span>
+              <span className="text-gray-600">Routes Created:</span>
+              <span className="ml-2 font-medium text-green-600">{uploadStats.routesCreated}</span>
+            </div>
+            <div>
+              <span className="text-gray-600">Timing Logs Created:</span>
+              <span className="ml-2 font-medium text-blue-600">{uploadStats.timingLogsCreated}</span>
+            </div>
+            <div>
+              <span className="text-gray-600">Records Stored:</span>
+              <span className="ml-2 font-medium text-purple-600">{uploadStats.stored}</span>
             </div>
           </div>
         </div>
@@ -198,7 +276,8 @@ export function UploadReport({ onUploadComplete }: UploadReportProps) {
             <p className="font-medium">Supported File Formats</p>
             <p className="text-blue-600">
               Upload CSV or Excel files (.csv, .xlsx, .xls) with the required headers. 
-              All records will be stored.
+              Only records with "CIT ERROR" reject fault will be processed and routes created for tomorrow.
+              Route timing data will be automatically logged for performance analysis.
             </p>
           </div>
         </div>

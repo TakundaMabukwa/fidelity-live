@@ -10,7 +10,9 @@ import {
   Navigation, 
   UserCheck, 
   LogOut,
-  LayoutDashboard
+  LayoutDashboard,
+  Car,
+  BarChart3
 } from 'lucide-react';
 import { useApp } from '@/contexts/app-context';
 import { cn } from '@/lib/utils';
@@ -30,6 +32,7 @@ const navigation = [
     items: [
       { id: 'routes', name: 'Routes', icon: Route },
       { id: 'route-assignment', name: 'Route Assignment', icon: GitBranch },
+      { id: 'route-reports', name: 'Route Reports', icon: BarChart3 },
     ],
   },
   {

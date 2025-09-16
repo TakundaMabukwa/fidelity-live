@@ -10,6 +10,7 @@ import StaffPage from './staff/page';
 import RouteAssignmentPage from './route-assignment/page';
 import VehiclesPage from './vehicles/page';
 import RoutingDashboardPage from '../routing-dashboard/page';
+import RouteReportsPage from '../route-reports/page';
 
 export default function DashboardPage() {
   const { activeTab } = useApp();
@@ -22,6 +23,8 @@ export default function DashboardPage() {
         return <RoutesPage />;
       case 'route-assignment':
         return <RouteAssignmentPage />;
+      case 'route-reports':
+        return <RouteReportsPage />;
       case 'branches':
         return <BranchesPage />;
       case 'customers':
