@@ -5,9 +5,12 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ChevronDown, ChevronRight, MapPin, Users, Clock, Route, RefreshCw, Building2 } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { useRoutes } from '@/contexts/routes-context';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useGroupedRoutes } from '@/contexts/grouped-routes-context';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useToast } from '@/hooks/use-toast';
 
 interface RoutesWithCustomersProps {
   className?: string;
@@ -15,8 +18,84 @@ interface RoutesWithCustomersProps {
 
 export function RoutesWithCustomers({ className }: RoutesWithCustomersProps) {
   const { groupedRoutes, loading, error, refreshGroupedRoutes, isLoaded, hasData } = useGroupedRoutes();
+  const { routes, loading: routesLoading, isLoaded: routesLoaded, loadRoutes } = useRoutes();
+  const { toast } = useToast();
   const [selectedDay, setSelectedDay] = useState<string>('');
   const [expandedRoutes, setExpandedRoutes] = useState<Set<string>>(new Set());
+  const [moveDialog, setMoveDialog] = useState<{ open: boolean; customerId?: number; customerName?: string; currentCode?: string }>(() => ({ open: false }));
+  const [targetRouteId, setTargetRouteId] = useState<Record<number, number | null>>({});
+  const [singleMoveTargetRouteId, setSingleMoveTargetRouteId] = useState<number | ''>('');
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [allCustomers, setAllCustomers] = useState<Array<{ id: number; customer: string; code: string | null }>>([]);
+  const [customersLoading, setCustomersLoading] = useState(false);
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [customersPage, setCustomersPage] = useState(1);
+  const [customersPageSize] = useState(50);
+
+  // Unique list of routes by Route name (no LocationCode shown in the dropdown)
+  const uniqueRoutes = React.useMemo(() => {
+    const map = new Map<string, any>();
+    routes.forEach(r => {
+      const key = r.Route || '';
+      if (!map.has(key)) map.set(key, r);
+    });
+    return Array.from(map.values());
+  }, [routes]);
+
+  // Map location code -> one representative Route name for display
+  const codeToRouteName = React.useMemo(() => {
+    const map = new Map<string, string>();
+    routes.forEach(r => {
+      const code = r.LocationCode as unknown as string | null;
+      if (code && !map.has(code)) {
+        map.set(code, r.Route || '');
+      }
+    });
+    return map;
+  }, [routes]);
+
+  const loadAllCustomers = React.useCallback(async () => {
+    try {
+      setCustomersLoading(true);
+      const params = new URLSearchParams();
+      params.set('limit', String(customersPageSize));
+      params.set('offset', String((customersPage - 1) * customersPageSize));
+      if (customerSearch) params.set('q', customerSearch);
+      const res = await fetch(`/api/customer-stops?${params.toString()}`);
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to load customers');
+      setAllCustomers(data.data);
+    } catch (e) {
+      console.error('Failed to load customers', e);
+    } finally {
+      setCustomersLoading(false);
+    }
+  }, [customersPage, customersPageSize, customerSearch]);
+
+  useEffect(() => {
+    if (addDialogOpen) {
+      if (allCustomers.length === 0 && !customersLoading) {
+        loadAllCustomers();
+      }
+      if (!routesLoaded) {
+        loadRoutes();
+      }
+    }
+  }, [addDialogOpen]);
+
+  // Ensure routes are loaded when opening per-customer Move dialog
+  useEffect(() => {
+    if (moveDialog.open && !routesLoaded) {
+      loadRoutes();
+    }
+  }, [moveDialog.open, routesLoaded, loadRoutes]);
+
+  // Re-fetch customers when page or search changes while dialog is open
+  useEffect(() => {
+    if (addDialogOpen) {
+      loadAllCustomers();
+    }
+  }, [customersPage, customerSearch, addDialogOpen, loadAllCustomers]);
 
   // Get current day of the week
   const getCurrentDay = () => {
@@ -276,6 +355,126 @@ export function RoutesWithCustomers({ className }: RoutesWithCustomersProps) {
             <RefreshCw className={`mr-2 w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             {loading ? 'Refreshing...' : 'Refresh'}
           </Button>
+          <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm">Add Customer to Route</Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-5xl w-[1000px]">
+              <DialogHeader>
+                <div className="flex justify-between items-center">
+                  <DialogTitle>Add Customer to Route</DialogTitle>
+                  <button
+                    type="button"
+                    className="px-3 py-1.5 border rounded text-sm hover:bg-gray-50"
+                    onClick={() => setAddDialogOpen(false)}
+                  >
+                    Close
+                  </button>
+                </div>
+              </DialogHeader>
+              <div className="space-y-3">
+                <div className="flex gap-2 items-center">
+                  <input
+                    className="flex-1 border rounded px-3 py-2 text-sm"
+                    placeholder="Search customers..."
+                    value={customerSearch}
+                    onChange={(e) => setCustomerSearch(e.target.value)}
+                  />
+                  <Button variant="outline" size="sm" onClick={() => { setCustomersPage(1); loadAllCustomers(); }}>
+                    {customersLoading ? 'Loading...' : 'Reload'}
+                  </Button>
+                  <div className="ml-auto flex items-center gap-2 text-sm text-gray-600">
+                    <span>Page {customersPage}</span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => { setCustomersPage(p => Math.max(1, p - 1)); }}
+                      disabled={customersPage <= 1}
+                    >
+                      Prev
+                    </Button>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="bg-black text-white hover:bg-black/90"
+                      onClick={() => { setCustomersPage(p => p + 1); }}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+                <div className="max-h-[500px] overflow-auto border rounded">
+                  {customersLoading && (
+                    <div className="divide-y">
+                      {Array.from({ length: 8 }).map((_, i) => (
+                        <div key={i} className="flex justify-between items-center px-3 py-2">
+                          <div className="space-y-1">
+                            <div className="bg-gray-200 rounded h-3 w-64 animate-pulse" />
+                            <div className="bg-gray-200 rounded h-3 w-32 animate-pulse" />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="bg-gray-200 rounded h-8 w-40 animate-pulse" />
+                            <div className="bg-gray-200 rounded h-8 w-16 animate-pulse" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {!customersLoading && (allCustomers
+                    .filter(c => !customerSearch || c.customer?.toLowerCase().includes(customerSearch.toLowerCase()))
+                  ).map((c) => (
+                    <div key={c.id} className="flex justify-between items-center px-3 py-2 border-b last:border-0 text-sm">
+                      <div>
+                        <span className="font-medium text-gray-900">{c.customer}</span>
+                        <span className="ml-2 text-gray-500">({(c.code && codeToRouteName.get(c.code)) || 'N/A'})</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <select
+                          className="border rounded px-2 py-1 text-sm"
+                          value={targetRouteId[c.id] ?? ''}
+                          onChange={(e) => setTargetRouteId(prev => ({ ...prev, [c.id]: Number(e.target.value) }))}
+                        >
+                          <option value="" disabled>Select route</option>
+                          {uniqueRoutes.map(r => (
+                            <option key={r.id} value={r.id}>{r.Route || 'Unnamed Route'}</option>
+                          ))}
+                        </select>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={async () => {
+                            const selected = targetRouteId[c.id];
+                            if (!selected) return;
+                            try {
+                              const res = await fetch('/api/routes/move-customer', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ customerId: c.id, targetRouteId: selected })
+                              });
+                              const data = await res.json();
+                              if (!res.ok || !data.success) throw new Error(data.error || 'Failed to move');
+                              const targetName = uniqueRoutes.find(r => r.id === selected)?.Route || 'Route';
+                              toast({ title: 'Customer moved', description: `${c.customer} moved to route ${targetName}` });
+                              await refreshGroupedRoutes();
+                            } catch (e) {
+                              const message = e instanceof Error ? e.message : 'Failed to move customer';
+                              toast({ title: 'Move failed', description: message, variant: 'destructive' });
+                            }
+                          }}
+                          disabled={!targetRouteId[c.id]}
+                        >
+                          Move
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                  {allCustomers.length === 0 && !customersLoading && (
+                    <div className="p-4 text-gray-500 text-sm">No customers found.</div>
+                  )}
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
@@ -448,6 +647,69 @@ export function RoutesWithCustomers({ className }: RoutesWithCustomersProps) {
                                 <div className="flex items-center space-x-2 text-gray-600">
                                   <Clock className="w-3 h-3" />
                                   <span>{formatDuration(customer.avg_seconds, customer.avg_minutes)}</span>
+                                <Dialog open={moveDialog.open && moveDialog.customerId === customer.id} onOpenChange={(open) => setMoveDialog(open ? { open, customerId: customer.id, customerName: customer.customer, currentCode: customer.code } : { open: false })}>
+                                  <DialogTrigger asChild>
+                                    <Button variant="outline" size="sm">Move</Button>
+                                  </DialogTrigger>
+                                  <DialogContent className="max-w-2xl w-[720px]">
+                                  <DialogHeader>
+                                    <div className="flex justify-between items-center">
+                                      <DialogTitle>Move {moveDialog.customerName}</DialogTitle>
+                                      <button
+                                        type="button"
+                                        className="px-3 py-1.5 border rounded text-sm hover:bg-gray-50"
+                                        onClick={() => setMoveDialog({ open: false })}
+                                      >
+                                        Close
+                                      </button>
+                                    </div>
+                                  </DialogHeader>
+                                    <div className="space-y-3">
+                                      <label className="block text-sm text-gray-700">Select target route</label>
+                                      <select
+                                        className="w-full border rounded px-3 py-2 text-sm"
+                                        value={singleMoveTargetRouteId}
+                                        onChange={(e) => setSingleMoveTargetRouteId(Number(e.target.value))}
+                                      >
+                                        <option value="" disabled>Select route</option>
+                                        {routesLoading && <option value="" disabled>Loading routes...</option>}
+                                        {!routesLoading && uniqueRoutes.map(r => (
+                                          <option key={r.id} value={r.id}>{r.Route || 'Unnamed Route'}</option>
+                                        ))}
+                                      </select>
+                                      <div className="flex justify-end gap-2 pt-2">
+                                        <Button variant="outline" size="sm" onClick={() => setMoveDialog({ open: false })}>Cancel</Button>
+                                        <Button
+                                          size="sm"
+                                          onClick={async () => {
+                                            if (singleMoveTargetRouteId === '' || !customer.id) return;
+                                            try {
+                                              const res = await fetch('/api/routes/move-customer', {
+                                                method: 'POST',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({ customerId: customer.id, targetRouteId: singleMoveTargetRouteId })
+                                              });
+                                              const data = await res.json();
+                                              if (!res.ok || !data.success) throw new Error(data.error || 'Failed to move');
+                                              setMoveDialog({ open: false });
+                                              setSingleMoveTargetRouteId('');
+                                              await refreshGroupedRoutes();
+                                          const movedName = customer.customer || 'Customer';
+                                          const targetName = uniqueRoutes.find(r => r.id === singleMoveTargetRouteId)?.Route || 'Route';
+                                          toast({ title: 'Customer moved', description: `${movedName} moved to route ${targetName}` });
+                                            } catch (e) {
+                                              const message = e instanceof Error ? e.message : 'Failed to move customer';
+                                              toast({ title: 'Move failed', description: message, variant: 'destructive' });
+                                            }
+                                          }}
+                                          disabled={singleMoveTargetRouteId === ''}
+                                        >
+                                          Move
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  </DialogContent>
+                                </Dialog>
                                 </div>
                               </div>
                             ))}

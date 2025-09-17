@@ -262,3 +262,33 @@ export async function getVehicleAssignmentCustomers(assignmentId: number): Promi
     throw error;
   }
 }
+
+export async function updateRoute(
+  id: number,
+  updates: Partial<Route>
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = await createClient();
+    const allowedKeys = new Set([
+      'Route','LocationCode','ServiceDays','userGroup','WeekNumber','StartDate','EndDate','Inactive','RouteId'
+    ]);
+    const payload: Record<string, any> = {};
+    Object.entries(updates).forEach(([key, value]) => {
+      if (!allowedKeys.has(key)) return;
+      payload[key] = typeof value === 'string' ? value.trim() : value;
+    });
+    if (Object.keys(payload).length === 0) return { success: true };
+
+    const { error } = await supabase
+      .from('routes')
+      .update(payload)
+      .eq('id', id);
+
+    if (error) return { success: false, error: error.message };
+
+    revalidatePath('/protected/dashboard');
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
+  }
+}

@@ -22,9 +22,14 @@ export async function GET(request: NextRequest) {
     // Create server-side Supabase client
     const supabase = await createClient();
     
-    // Get code parameter from query string
+    // Get query parameters
     const { searchParams } = new URL(request.url);
     const code = searchParams.get('code');
+    const q = searchParams.get('q');
+    const limitParam = searchParams.get('limit');
+    const offsetParam = searchParams.get('offset');
+    const limit = Math.max(1, Math.min(1000, Number(limitParam ?? '1000'))); // default high if not provided
+    const offset = Math.max(0, Number(offsetParam ?? '0'));
     
     let query = supabase
       .from('customer_stops')
@@ -36,6 +41,11 @@ export async function GET(request: NextRequest) {
       query = query.eq('code', code);
       console.log('🔍 Filtering by code:', code);
     }
+    if (q && q.trim() !== '') {
+      query = query.ilike('customer', `%${q}%`);
+    }
+    // Apply pagination
+    query = query.range(offset, offset + limit - 1);
     
     const { data: customerStops, error: customerStopsError } = await query;
 
@@ -53,6 +63,8 @@ export async function GET(request: NextRequest) {
       success: true,
       data: customerStops || [],
       count: customerStops?.length || 0,
+      limit,
+      offset,
       timestamp: new Date().toISOString()
     });
 
