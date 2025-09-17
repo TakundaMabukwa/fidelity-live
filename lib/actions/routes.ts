@@ -79,6 +79,8 @@ export async function getAllRoutes(): Promise<Route[]> {
   }
 }
 
+// Note: older duplicate kept during merge caused a redeclare error; this is the canonical updateRoute
+// Use this single definition only.
 export async function updateRoute(
   id: number,
   updates: Partial<Route>
@@ -86,20 +88,23 @@ export async function updateRoute(
   try {
     const supabase = await createClient();
     const allowedKeys = new Set([
-      'Route','LocationCode','ServiceDays','userGroup','WeekNumber','StartDate','EndDate','Inactive','RouteId'
+      'Route', 'LocationCode', 'ServiceDays', 'userGroup', 'WeekNumber', 'StartDate', 'EndDate', 'Inactive', 'RouteId'
     ]);
     const payload: Record<string, any> = {};
-    Object.entries(updates).forEach(([key, value]) => {
-      if (!allowedKeys.has(key)) return;
+    for (const [key, value] of Object.entries(updates)) {
+      if (!allowedKeys.has(key)) continue;
       payload[key] = typeof value === 'string' ? value.trim() : value;
-    });
+    }
     if (Object.keys(payload).length === 0) return { success: true };
+
     const { error } = await supabase
       .from('routes')
       .update(payload)
       .eq('id', id);
+
     if (error) return { success: false, error: error.message };
-    revalidatePath('/protected/dashboard/editable-routes');
+
+    revalidatePath('/protected/dashboard');
     return { success: true };
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
@@ -263,32 +268,4 @@ export async function getVehicleAssignmentCustomers(assignmentId: number): Promi
   }
 }
 
-export async function updateRoute(
-  id: number,
-  updates: Partial<Route>
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    const supabase = await createClient();
-    const allowedKeys = new Set([
-      'Route','LocationCode','ServiceDays','userGroup','WeekNumber','StartDate','EndDate','Inactive','RouteId'
-    ]);
-    const payload: Record<string, any> = {};
-    Object.entries(updates).forEach(([key, value]) => {
-      if (!allowedKeys.has(key)) return;
-      payload[key] = typeof value === 'string' ? value.trim() : value;
-    });
-    if (Object.keys(payload).length === 0) return { success: true };
-
-    const { error } = await supabase
-      .from('routes')
-      .update(payload)
-      .eq('id', id);
-
-    if (error) return { success: false, error: error.message };
-
-    revalidatePath('/protected/dashboard');
-    return { success: true };
-  } catch (err) {
-    return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
-  }
-}
+// Duplicate updateRoute removed (kept earlier canonical definition)

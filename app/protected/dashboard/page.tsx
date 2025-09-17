@@ -11,7 +11,6 @@ import RouteAssignmentPage from './route-assignment/page';
 import VehiclesPage from './vehicles/page';
 import RoutingDashboardPage from '../routing-dashboard/page';
 import RouteReportsPage from '../route-reports/page';
-<<<<<<< HEAD
 import EditableInfoPage from './editable-info/page';
 
 export default function DashboardPage() {
@@ -37,7 +36,6 @@ export default function DashboardPage() {
         return <StaffPage />;
       case 'vehicles':
         return <VehiclesPage />;
-<<<<<<< HEAD
       case 'editable-info':
         return <EditableInfoPage />;
       default:
