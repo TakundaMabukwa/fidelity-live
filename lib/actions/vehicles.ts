@@ -41,6 +41,42 @@ export async function getVehicles(): Promise<{
   }
 }
 
+export async function updateVehicle(
+  id: number,
+  updates: Partial<Vehicle & { branch?: string }>
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = await createClient();
+
+    const allowedKeys = new Set([
+      'structure_name','registration_no','fleet_no','manufacturer','schedule','branch'
+    ]);
+
+    const payload: Record<string, any> = {};
+    Object.entries(updates).forEach(([key, value]) => {
+      if (!allowedKeys.has(key)) return;
+      payload[key] = value === '' ? null : value;
+    });
+
+    if (Object.keys(payload).length === 0) {
+      return { success: true };
+    }
+
+    const { error } = await supabase
+      .from('vehicles')
+      .update(payload)
+      .eq('id', id);
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
+  }
+}
+
 export async function getVehicleByPlate(plate: string): Promise<{
   success: boolean;
   data?: Vehicle | null;

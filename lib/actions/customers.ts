@@ -331,3 +331,38 @@ export async function searchCustomers(query: string): Promise<Customer[]> {
 
   return data || [];
 }
+
+export async function updateCustomerDuration(
+  id: number,
+  updates: Partial<Customer>
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient();
+
+  const allowedKeys = new Set([
+    'type','code','customer','status','status_time','hours','h/c','min','m/c','sec',
+    'duration_in_sec','duration','start_time','announce_time','planned_arrival','planned_depart','actual_arrival',
+    'collection_bags','delivery_bags'
+  ]);
+
+  const payload: Record<string, any> = {};
+  Object.entries(updates).forEach(([key, value]) => {
+    if (!allowedKeys.has(key)) return;
+    payload[key] = value === '' ? null : value;
+  });
+
+  if (Object.keys(payload).length === 0) {
+    return { success: true };
+  }
+
+  const { error } = await supabase
+    .from('customers_duration')
+    .update(payload)
+    .eq('id', id);
+
+  if (error) {
+    console.error('Error updating customers_duration:', error);
+    return { success: false, error: error.message };
+  }
+
+  return { success: true };
+}

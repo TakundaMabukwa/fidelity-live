@@ -10,6 +10,7 @@ import { Vehicle } from '@/lib/types';
 import { TableColumn } from '@/lib/types';
 import { RefreshCw, ChevronLeft, ChevronRight, Truck, FileText } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { updateVehicle } from '@/lib/actions/vehicles';
 
 const createVehicleColumns = (): TableColumn<Vehicle>[] => [
   {
@@ -239,6 +240,14 @@ export function VehiclesTable() {
           data={paginatedVehicles.data}
           columns={createVehicleColumns()}
           loading={loading}
+          getRowId={(row) => row.id}
+          onSaveEdits={async (changes) => {
+            for (const change of changes) {
+              const id = (change.row as Vehicle).id;
+              await updateVehicle(id, change.updates as Partial<Vehicle>);
+            }
+            await handleRefresh();
+          }}
         />
 
         {/* Pagination Controls */}

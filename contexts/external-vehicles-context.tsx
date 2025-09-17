@@ -40,14 +40,43 @@ export function ExternalVehiclesProvider({ children }: ExternalVehiclesProviderP
     try {
       console.log('🔄 Loading external vehicles...');
       
-      const response = await fetch('/api/fidelity/vehicles');
+      const response = await fetch('/api/fidelity/vehicles', { credentials: 'include' });
       
+      const contentType = response.headers.get('content-type') || '';
+      const readJsonSafely = async () => {
+        try {
+          return await response.json();
+        } catch (_) {
+          return null;
+        }
+      };
+      const readTextSafely = async () => {
+        try {
+          return await response.text();
+        } catch (_) {
+          return '';
+        }
+      };
+
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to fetch vehicles');
+        if (contentType.includes('application/json')) {
+          const errorData = await readJsonSafely();
+          throw new Error(errorData?.error || `Failed to fetch vehicles (${response.status})`);
+        } else {
+          const text = await readTextSafely();
+          throw new Error(`Failed to fetch vehicles (${response.status}) - non-JSON response${text ? `: ${text.substring(0, 120)}...` : ''}`);
+        }
       }
-      
-      const result = await response.json();
+
+      if (!contentType.includes('application/json')) {
+        const text = await readTextSafely();
+        throw new Error(`Unexpected non-JSON response${response.redirected ? ' (redirected)' : ''}${text ? `: ${text.substring(0, 120)}...` : ''}`);
+      }
+
+      const result = await readJsonSafely();
+      if (!result) {
+        throw new Error('Unexpected empty JSON response');
+      }
       
       if (result.success && result.data) {
         setVehicles(result.data);
@@ -61,9 +90,15 @@ export function ExternalVehiclesProvider({ children }: ExternalVehiclesProviderP
         throw new Error('Invalid response format');
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to load external vehicles';
-      setError(errorMessage);
-      console.error('❌ Error loading external vehicles:', errorMessage);
+      // Ignore user-initiated aborts quietly
+      const errName = (err as any)?.name;
+      if (errName === 'AbortError') {
+        console.warn('⚠️ External vehicles request aborted');
+      } else {
+        const errorMessage = err instanceof Error ? err.message : 'Failed to load external vehicles';
+        setError(errorMessage);
+        console.error('❌ Error loading external vehicles:', errorMessage);
+      }
     } finally {
       setLoading(false);
     }

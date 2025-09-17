@@ -12,6 +12,8 @@ interface RoutesContextType {
   refreshRoutes: () => Promise<void>;
   isLoaded: boolean;
   hasData: boolean;
+  updateRouteLocal: (id: number, updates: Partial<Route>) => void;
+  updateRoutesLocal: (changes: Array<{ id: number; updates: Partial<Route> }>) => void;
 }
 
 const RoutesContext = createContext<RoutesContextType | undefined>(undefined);
@@ -62,6 +64,20 @@ export function RoutesProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const updateRouteLocal = (id: number, updates: Partial<Route>) => {
+    setRoutes(prev => prev.map(r => (r.id === id ? { ...r, ...updates } : r)));
+  };
+
+  const updateRoutesLocal = (changes: Array<{ id: number; updates: Partial<Route> }>) => {
+    if (!changes || changes.length === 0) return;
+    const updatesMap = new Map<number, Partial<Route>>();
+    for (const change of changes) {
+      const current = updatesMap.get(change.id) || {};
+      updatesMap.set(change.id, { ...current, ...change.updates });
+    }
+    setRoutes(prev => prev.map(r => (updatesMap.has(r.id) ? { ...r, ...updatesMap.get(r.id)! } : r)));
+  };
+
   return (
     <RoutesContext.Provider value={{ 
       routes, 
@@ -70,7 +86,9 @@ export function RoutesProvider({ children }: { children: ReactNode }) {
       loadRoutes, 
       refreshRoutes, 
       isLoaded, 
-      hasData: routes.length > 0 
+      hasData: routes.length > 0,
+      updateRouteLocal,
+      updateRoutesLocal,
     }}>
       {children}
     </RoutesContext.Provider>

@@ -11,6 +11,7 @@ import RouteAssignmentPage from './route-assignment/page';
 import VehiclesPage from './vehicles/page';
 import RoutingDashboardPage from '../routing-dashboard/page';
 import RouteReportsPage from '../route-reports/page';
+import EditableRoutesPage from './routes-editable/page';
 
 export default function DashboardPage() {
   const { activeTab } = useApp();
@@ -35,6 +36,8 @@ export default function DashboardPage() {
         return <StaffPage />;
       case 'vehicles':
         return <VehiclesPage />;
+      case 'editable-routes':
+        return <EditableRoutesPage />;
       default:
         return <RoutingDashboardPage />;
     }

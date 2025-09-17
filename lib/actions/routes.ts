@@ -61,6 +61,51 @@ export async function getRoutes(): Promise<Route[]> {
   }
 }
 
+export async function getAllRoutes(): Promise<Route[]> {
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from('routes')
+      .select('*')
+      .order('Route', { ascending: true });
+    if (error) {
+      console.error('Error fetching all routes:', error);
+      throw new Error('Failed to fetch routes');
+    }
+    return data || [];
+  } catch (error) {
+    console.error('Error in getAllRoutes:', error);
+    throw error;
+  }
+}
+
+export async function updateRoute(
+  id: number,
+  updates: Partial<Route>
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = await createClient();
+    const allowedKeys = new Set([
+      'Route','LocationCode','ServiceDays','userGroup','WeekNumber','StartDate','EndDate','Inactive','RouteId'
+    ]);
+    const payload: Record<string, any> = {};
+    Object.entries(updates).forEach(([key, value]) => {
+      if (!allowedKeys.has(key)) return;
+      payload[key] = typeof value === 'string' ? value.trim() : value;
+    });
+    if (Object.keys(payload).length === 0) return { success: true };
+    const { error } = await supabase
+      .from('routes')
+      .update(payload)
+      .eq('id', id);
+    if (error) return { success: false, error: error.message };
+    revalidatePath('/protected/dashboard/editable-routes');
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
+  }
+}
+
 export async function getCustomersByLocationCode(locationCode: string): Promise<CustomerDuration[]> {
   try {
     const supabase = await createClient();

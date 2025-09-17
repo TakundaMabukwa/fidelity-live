@@ -11,6 +11,7 @@ import { Staff } from '@/lib/types';
 import { TableColumn } from '@/lib/types';
 import { RefreshCw, ChevronLeft, ChevronRight, UserCheck, FileText } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { updateStaff } from '@/lib/actions/staff';
 
 const createStaffColumns = (): TableColumn<Staff>[] => [
   {
@@ -269,6 +270,14 @@ export function StaffTable() {
           data={paginatedStaff.data}
           columns={createStaffColumns()}
           loading={loading}
+          getRowId={(row) => row.id}
+          onSaveEdits={async (changes) => {
+            for (const change of changes) {
+              const id = (change.row as Staff).id;
+              await updateStaff(id, change.updates as Partial<Staff>);
+            }
+            await handleRefresh();
+          }}
         />
 
         {/* Pagination Controls */}

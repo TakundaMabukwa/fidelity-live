@@ -14,6 +14,8 @@ interface DataTableProps<T> {
   loading?: boolean;
   searchable?: boolean;
   showActions?: boolean;
+  getRowId?: (row: T) => string | number;
+  onSaveEdits?: (changes: Array<{ row: T; rowIndex: number; updates: Partial<T> }>) => Promise<void> | void;
 }
 
 export function DataTable<T extends Record<string, any>>({
@@ -23,9 +25,14 @@ export function DataTable<T extends Record<string, any>>({
   searchPlaceholder = "Search...",
   loading = false,
   searchable = true,
-  showActions = true
+  showActions = true,
+  getRowId,
+  onSaveEdits
 }: DataTableProps<T>) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedValues, setEditedValues] = useState<Record<string, any>>({});
+  const [rowEditing, setRowEditing] = useState<Set<number>>(new Set());
   const [sortConfig, setSortConfig] = useState<{
     key: keyof T;
     direction: 'asc' | 'desc';
@@ -52,10 +59,147 @@ export function DataTable<T extends Record<string, any>>({
   }, [filteredData, sortConfig]);
 
   const handleSort = (key: keyof T) => {
+    if (isEditing || rowEditing.size > 0) return; // Disable sorting while editing
     setSortConfig(prev => ({
       key,
       direction: prev?.key === key && prev.direction === 'asc' ? 'desc' : 'asc'
     }));
+  };
+
+  const getCellMapKey = (rowIndex: number, key: keyof T) => `${rowIndex}:${String(key)}`;
+  const getEditedValue = (row: T, rowIndex: number, key: keyof T) => {
+    const mapKey = getCellMapKey(rowIndex, key);
+    return Object.prototype.hasOwnProperty.call(editedValues, mapKey)
+      ? editedValues[mapKey]
+      : row[key];
+  };
+  const setEditedValue = (rowIndex: number, key: keyof T, value: any) => {
+    const mapKey = getCellMapKey(rowIndex, key);
+    setEditedValues(prev => ({ ...prev, [mapKey]: value }));
+  };
+
+  const normalizeForEdit = (value: any): any => {
+    if (typeof value === 'string') return value.trim();
+    return value;
+  };
+
+  const initializeRowEditedValues = (row: T, rowIndex: number) => {
+    const updates: Record<string, any> = {};
+    for (const col of columns) {
+      const original = row[col.key];
+      const normalized = normalizeForEdit(original);
+      if (normalized !== original) {
+        updates[getCellMapKey(rowIndex, col.key)] = normalized;
+      }
+    }
+    if (Object.keys(updates).length > 0) {
+      setEditedValues(prev => ({ ...prev, ...updates }));
+    }
+  };
+
+  const handleCancel = () => {
+    setEditedValues({});
+    setIsEditing(false);
+  };
+
+  const handleSave = async () => {
+    if (!onSaveEdits) {
+      setIsEditing(false);
+      setEditedValues({});
+      return;
+    }
+    // Group edited values by row index and construct updates objects
+    const updatesByRowIndex: Record<number, Partial<T>> = {} as Record<number, Partial<T>>;
+    for (const key of Object.keys(editedValues)) {
+      const [rowIndexStr, colKey] = key.split(':');
+      const rowIndex = Number(rowIndexStr);
+      if (Number.isNaN(rowIndex)) continue;
+      const originalRow = sortedData[rowIndex];
+      if (!originalRow) continue;
+      const newValue = editedValues[key];
+      const originalValue = (originalRow as any)[colKey];
+      if (newValue === originalValue) continue;
+      if (!updatesByRowIndex[rowIndex]) updatesByRowIndex[rowIndex] = {} as Partial<T>;
+      (updatesByRowIndex[rowIndex] as any)[colKey] = newValue;
+    }
+
+    const changes: Array<{ row: T; rowIndex: number; updates: Partial<T> }> = Object.entries(updatesByRowIndex)
+      .map(([rowIndexStr, updates]) => {
+        const rowIndex = Number(rowIndexStr);
+        return { row: sortedData[rowIndex], rowIndex, updates };
+      });
+
+    if (changes.length === 0) {
+      setIsEditing(false);
+      setEditedValues({});
+      return;
+    }
+
+    await Promise.resolve(onSaveEdits(changes));
+    setIsEditing(false);
+    setEditedValues({});
+  };
+
+  const startRowEdit = (rowIndex: number) => {
+    setRowEditing(prev => {
+      const next = new Set(prev);
+      next.add(rowIndex);
+      return next;
+    });
+    const row = sortedData[rowIndex];
+    if (row) initializeRowEditedValues(row, rowIndex);
+  };
+
+  const clearRowEditedValues = (rowIndex: number) => {
+    setEditedValues(prev => {
+      const next: Record<string, any> = {};
+      const prefix = `${rowIndex}:`;
+      for (const [k, v] of Object.entries(prev)) {
+        if (!k.startsWith(prefix)) next[k] = v;
+      }
+      return next;
+    });
+  };
+
+  const cancelRowEdit = (rowIndex: number) => {
+    clearRowEditedValues(rowIndex);
+    setRowEditing(prev => {
+      const next = new Set(prev);
+      next.delete(rowIndex);
+      return next;
+    });
+  };
+
+  const saveRowEdit = async (rowIndex: number) => {
+    if (!onSaveEdits) {
+      cancelRowEdit(rowIndex);
+      return;
+    }
+    const updates: Partial<T> = {} as Partial<T>;
+    const prefix = `${rowIndex}:`;
+    const originalRow = sortedData[rowIndex];
+    if (!originalRow) {
+      cancelRowEdit(rowIndex);
+      return;
+    }
+    for (const [k, v] of Object.entries(editedValues)) {
+      if (!k.startsWith(prefix)) continue;
+      const colKey = k.slice(prefix.length);
+      const originalValue = (originalRow as any)[colKey];
+      if (v === originalValue) continue;
+      (updates as any)[colKey] = v;
+    }
+    if (Object.keys(updates).length === 0) {
+      cancelRowEdit(rowIndex);
+      return;
+    }
+    await Promise.resolve(onSaveEdits([{ row: originalRow, rowIndex, updates }]));
+    clearRowEditedValues(rowIndex);
+    setRowEditing(prev => {
+      const next = new Set(prev);
+      next.delete(rowIndex);
+      return next;
+    });
   };
 
   if (loading) {
@@ -93,6 +237,24 @@ export function DataTable<T extends Record<string, any>>({
       <div className="flex flex-shrink-0 justify-between items-center">
         {title && <h2 className="font-bold text-gray-900 text-2xl">{title}</h2>}
         <div className="flex items-center gap-2">
+          {isEditing ? (
+            <>
+              <Button variant="outline" size="sm" onClick={handleCancel}>Cancel</Button>
+              <Button variant="default" size="sm" onClick={handleSave}>Save</Button>
+            </>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                // initialize all visible rows with trimmed values
+                sortedData.forEach((row, idx) => initializeRowEditedValues(row, idx));
+                setIsEditing(true);
+              }}
+            >
+              Edit
+            </Button>
+          )}
           <Button variant="outline" size="sm">
             <Download className="mr-2 w-4 h-4" />
             Download (csv)
@@ -111,6 +273,7 @@ export function DataTable<T extends Record<string, any>>({
             placeholder={searchPlaceholder}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
+            disabled={isEditing || rowEditing.size > 0}
             className="max-w-sm"
           />
           <div className="text-gray-600 text-sm">
@@ -122,28 +285,28 @@ export function DataTable<T extends Record<string, any>>({
       {/* Table Container */}
       <div className="flex flex-col flex-1 border rounded-lg min-h-0 overflow-hidden">
         <div className="flex-1 overflow-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
-          <table className="w-full table-fixed">
+          <table className="w-full min-w-[1200px] table-auto">
           <thead className="top-0 z-10 sticky bg-slate-800 text-white">
             <tr>
               {columns.map((column, index) => (
                 <th
                   key={column.key as string}
                   className={`px-4 py-3 font-medium text-left ${
-                    index === 0 ? 'w-16' : // NO column
-                    index === 1 ? 'w-24' : // COMP NO column
-                    index === 2 ? 'w-32' : // SURNAME column
-                    index === 3 ? 'w-20' : // INITIAL column
-                    index === 4 ? 'w-40' : // FULL NAMES column
-                    index === 5 ? 'w-36' : // ID NUMBER column
-                    index === 6 ? 'w-32' : // CELL # column
-                    'w-48' // JOB DESCRIPTION column
+                    index === 0 ? 'w-24' : // NO column
+                    index === 1 ? 'w-32' : // COMP NO column
+                    index === 2 ? 'w-48' : // SURNAME column
+                    index === 3 ? 'w-32' : // INITIAL column
+                    index === 4 ? 'w-64' : // FULL NAMES column
+                    index === 5 ? 'w-56' : // ID NUMBER column
+                    index === 6 ? 'w-48' : // CELL # column
+                    'w-72' // JOB DESCRIPTION column
                   }`}
                 >
                   <div
                     className={`flex items-center gap-2 ${
-                      column.sortable !== false ? 'cursor-pointer hover:text-blue-200' : ''
+                      column.sortable !== false && !isEditing ? 'cursor-pointer hover:text-blue-200' : ''
                     }`}
-                    onClick={() => column.sortable !== false && handleSort(column.key)}
+                    onClick={() => column.sortable !== false && !isEditing && handleSort(column.key)}
                   >
                     {column.header}
                     {column.sortable !== false && (
@@ -175,32 +338,69 @@ export function DataTable<T extends Record<string, any>>({
           <tbody>
             {sortedData.map((row, index) => (
               <tr key={index} className="hover:bg-gray-50 border-b">
-                {columns.map((column, colIndex) => (
-                  <td 
-                    key={column.key as string} 
-                    className={`px-4 py-3 truncate ${
-                      colIndex === 0 ? 'w-16' : // NO column
-                      colIndex === 1 ? 'w-24' : // COMP NO column
-                      colIndex === 2 ? 'w-32' : // SURNAME column
-                      colIndex === 3 ? 'w-20' : // INITIAL column
-                      colIndex === 4 ? 'w-40' : // FULL NAMES column
-                      colIndex === 5 ? 'w-36' : // ID NUMBER column
-                      colIndex === 6 ? 'w-32' : // CELL # column
-                      'w-48' // JOB DESCRIPTION column
-                    }`}
-                    title={column.render ? String(column.render(row[column.key], row)) : String(row[column.key])}
-                  >
-                    {column.render
-                      ? column.render(row[column.key], row)
-                      : row[column.key]
-                    }
-                  </td>
-                ))}
+                {columns.map((column, colIndex) => {
+                  const rawValue = getEditedValue(row, index, column.key);
+                  const valueType = typeof rawValue;
+                  const isRowEditing = isEditing || rowEditing.has(index);
+                  return (
+                    <td 
+                      key={column.key as string} 
+                      className={`px-4 py-3 truncate ${
+                        colIndex === 0 ? 'w-24' : // NO column
+                        colIndex === 1 ? 'w-32' : // COMP NO column
+                        colIndex === 2 ? 'w-48' : // SURNAME column
+                        colIndex === 3 ? 'w-32' : // INITIAL column
+                        colIndex === 4 ? 'w-64' : // FULL NAMES column
+                        colIndex === 5 ? 'w-56' : // ID NUMBER column
+                        colIndex === 6 ? 'w-48' : // CELL # column
+                        'w-72' // JOB DESCRIPTION column
+                      }`}
+                    >
+                      {isRowEditing ? (
+                        valueType === 'boolean' ? (
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4"
+                            checked={Boolean(rawValue)}
+                            onChange={(e) => setEditedValue(index, column.key, e.target.checked)}
+                          />
+                        ) : (
+                          (() => {
+                            const displayValue = rawValue == null ? '' : String(rawValue);
+                            const widthCh = Math.min(60, Math.max(8, displayValue.length + 2));
+                            return (
+                              <Input
+                                type={valueType === 'number' ? 'number' : 'text'}
+                                value={displayValue}
+                                onChange={(e) => setEditedValue(index, column.key, valueType === 'number' ? Number(e.target.value) : e.target.value)}
+                                className="h-8 w-auto px-3 py-1"
+                                style={{ width: `${widthCh}ch` }}
+                              />
+                            );
+                          })()
+                        )
+                      ) : (
+                        <span className="inline-block px-2 py-0.5">
+                          {column.render
+                            ? column.render(row[column.key], row)
+                            : (row[column.key] as React.ReactNode)}
+                        </span>
+                      )}
+                    </td>
+                  );
+                })}
                 {showActions && (
                   <td className="px-4 py-3 w-20">
-                    <Button variant="ghost" size="sm">
-                      <MoreHorizontal className="w-4 h-4" />
-                    </Button>
+                    {rowEditing.has(index) ? (
+                      <div className="flex items-center gap-2">
+                        <Button variant="default" size="sm" onClick={() => saveRowEdit(index)}>Save</Button>
+                        <Button variant="outline" size="sm" onClick={() => cancelRowEdit(index)}>Cancel</Button>
+                      </div>
+                    ) : (
+                      <Button variant="ghost" size="sm" onClick={() => startRowEdit(index)}>
+                        Edit
+                      </Button>
+                    )}
                   </td>
                 )}
               </tr>

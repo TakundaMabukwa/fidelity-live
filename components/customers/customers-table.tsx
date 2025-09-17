@@ -11,6 +11,7 @@ import { TableColumn } from '@/lib/types';
 import { RefreshCw, ChevronLeft, ChevronRight, Users, FileText, Search } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
+import { updateCustomerDuration } from '@/lib/actions/customers';
 
 const createCustomerColumns = (): TableColumn<Customer>[] => [
   {
@@ -306,6 +307,15 @@ export function CustomersTable() {
           data={filteredAndPaginatedCustomers.data}
           columns={createCustomerColumns()}
           loading={loading}
+          getRowId={(row) => row.id}
+          onSaveEdits={async (changes) => {
+            // Persist changes for each edited row
+            for (const change of changes) {
+              const id = (change.row as Customer).id;
+              await updateCustomerDuration(id, change.updates as Partial<Customer>);
+            }
+            await handleRefresh();
+          }}
         />
 
         {/* Pagination Controls */}

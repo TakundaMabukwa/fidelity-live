@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
     console.log('✅ User authenticated:', user.email);
     
     // Try to fetch vehicles from external endpoint
-    const externalUrl = 'http://64.227.138.235:3000/api/fidelity/vehicles';
+    const externalUrl = process.env.EXTERNAL_VEHICLES_URL || 'http://64.227.138.235:3000/api/fidelity/vehicles';
     
     console.log('🌐 Fetching from external URL:', externalUrl);
     
@@ -44,6 +44,11 @@ export async function GET(request: NextRequest) {
         throw new Error(externalError);
       }
 
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        const text = await response.text();
+        throw new Error(`External returned non-JSON${response.redirected ? ' (redirected)' : ''}${text ? `: ${text.substring(0,120)}...` : ''}`);
+      }
       const externalData = await response.json();
       
       if (!externalData.success) {
@@ -55,8 +60,12 @@ export async function GET(request: NextRequest) {
       vehicles = externalData.data || [];
       console.log('✅ External vehicles fetched:', vehicles.length);
       
-    } catch (fetchError) {
-      console.warn('⚠️ External API unavailable, fetching from vehicles table:', fetchError);
+    } catch (fetchError: any) {
+      if (fetchError?.name === 'TimeoutError' || fetchError?.name === 'AbortError') {
+        console.warn('⚠️ External API request aborted/timeout, falling back to DB');
+      } else {
+        console.warn('⚠️ External API unavailable, fetching from vehicles table:', fetchError);
+      }
       
       // Fetch vehicles from database when external API is unavailable
       const vehiclesResult = await getVehicles();
@@ -101,14 +110,14 @@ export async function GET(request: NextRequest) {
       timestamp: new Date().toISOString()
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('❌ Unexpected error:', error);
     
     // Handle specific error types
     if (error instanceof Error) {
-      if (error.name === 'TimeoutError') {
+      if (error.name === 'TimeoutError' || error.name === 'AbortError') {
         return NextResponse.json(
-          { success: false, error: 'Request timeout - external service not responding' },
+          { success: false, error: 'Request aborted/timeout - external service not responding' },
           { status: 504 }
         );
       }

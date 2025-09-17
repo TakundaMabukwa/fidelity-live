@@ -235,10 +235,6 @@ export function RealtimeEnhancedVehicleCard({ vehicle, onAction }: RealtimeEnhan
       <div className="flex justify-between items-center mb-4">
         <div className="flex items-center gap-3">
           <div className="font-bold text-gray-900 text-2xl">{vehicle.plate || `#${vehicle.id}`}</div>
-          <Badge className={statusInfo.statusColor}>
-            <StatusIcon className="mr-1 w-3 h-3" />
-            {statusInfo.status.toUpperCase()}
-          </Badge>
         </div>
         <div className="flex items-center gap-2">
           <ConnectionIcon className={`w-4 h-4 ${connectionInfo.color}`} />

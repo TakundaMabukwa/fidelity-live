@@ -42,6 +42,7 @@ const navigation = [
       { id: 'drivers', name: 'Drivers', icon: Truck },
       { id: 'staff', name: 'Staff', icon: UserCheck },
       { id: 'vehicles', name: 'Vehicles', icon: Navigation },
+      { id: 'editable-routes', name: 'Editable Routes', icon: GitBranch },
     ],
   },
 ];

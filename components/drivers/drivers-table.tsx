@@ -12,6 +12,7 @@ import { Driver } from '@/lib/types';
 import { TableColumn } from '@/lib/types';
 import { Search, RefreshCw, Download, ChevronLeft, ChevronRight, User } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { updateDriver } from '@/lib/actions/drivers';
 
 const createDriverColumns = (): TableColumn<Driver>[] => [
   {
@@ -271,6 +272,14 @@ export function DriversTable() {
           data={filteredAndPaginatedDrivers.data}
           columns={createDriverColumns()}
           loading={loading}
+          getRowId={(row) => row.no}
+          onSaveEdits={async (changes) => {
+            for (const change of changes) {
+              const no = (change.row as Driver).no;
+              await updateDriver(no, change.updates as Partial<Driver>);
+            }
+            await handleRefresh();
+          }}
         />
 
         {/* Pagination Controls */}
