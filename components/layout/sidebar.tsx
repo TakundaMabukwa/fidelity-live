@@ -44,6 +44,12 @@ const navigation = [
       { id: 'vehicles', name: 'Vehicles', icon: Navigation },
     ],
   },
+  {
+    title: 'EDITABLE INFORMATION',
+    items: [
+      { id: 'editable-info', name: 'Editable Info', icon: GitBranch },
+    ],
+  },
 ];
 
 export function Sidebar() {
